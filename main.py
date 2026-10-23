@@ -21,6 +21,14 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     question: str
 
+@app.get("/")
+def home():
+    return {
+        "message": "AI Trip Planner API is running!",
+        "docs": "/docs",
+        "query_endpoint": "/query"
+    }
+
 @app.post("/query")
 async def query_travel_agent(query:QueryRequest):
     try:
@@ -46,4 +54,9 @@ async def query_travel_agent(query:QueryRequest):
         
         return {"answer": final_output}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "traceback": traceback.format_exc()}
+        )

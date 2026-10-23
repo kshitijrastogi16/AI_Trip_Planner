@@ -48,4 +48,5 @@ if submit_button and user_input.strip():
             st.error("Bot failed to respond: " + response.text)
 
     except Exception as e:
-        raise f"The response failed due to {e}"
+        st.error(f"The response failed due to {e}")
+        st.stop()

@@ -11,5 +11,5 @@ langchain-groq
 langchain-openai
 langchain-community
 langchain-tavily
-langchain-google-community
+langchain-google-community[places]
 pandas

@@ -1,45 +1,57 @@
-import os
-from dotenv import load_dotenv
-from typing import Literal, Optional, Any
-from pydantic import BaseModel, Field
+"""LLM construction for the travel-planning agent.
+
+The application uses Groq BYOK: callers must provide a key for every request.
+Keys are deliberately not read from environment variables or persisted here.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
 from utils.config_loader import load_config
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
 
 
 class ConfigLoader:
-    def __init__(self):
-        print(f"Loaded config.....")
+    def __init__(self) -> None:
         self.config = load_config()
-    
-    def __getitem__(self, key):
+
+    def __getitem__(self, key: str) -> Any:
         return self.config[key]
 
-class ModelLoader(BaseModel):
-    model_provider: Literal["groq", "openai"] = "groq"
-    config: Optional[ConfigLoader] = Field(default=None, exclude=True)
 
-    def model_post_init(self, __context: Any) -> None:
+class ModelLoader:
+    """Create a Groq chat model using an explicitly supplied user API key."""
+
+    def __init__(self, model_provider: str = "groq", api_key: str | None = None) -> None:
+        provider = (model_provider or "").strip().lower()
+        if provider != "groq":
+            raise ValueError("Only the Groq provider is currently supported for BYOK.")
+
+        key = (api_key or "").strip()
+        if not key:
+            raise ValueError("A Groq API key is required. Enter your key in the application.")
+
+        self.model_provider = provider
+        # Keep the secret out of repr/log output. Never write it to environment or disk.
+        self._api_key = key
         self.config = ConfigLoader()
-    
-    class Config:
-        arbitrary_types_allowed = True
-    
+
+    def __repr__(self) -> str:
+        return "ModelLoader(model_provider='groq', api_key_set=True)"
+
     def load_llm(self):
-        """
-        Load and return the LLM model.
-        """
-        print("LLM loading...")
-        print(f"Loading model from provider: {self.model_provider}")
-        if self.model_provider == "groq":
-            print("Loading LLM from Groq..............")
-            groq_api_key = os.getenv("GROQ_API_KEY")
-            model_name = self.config["llm"]["groq"]["model_name"]
-            llm=ChatGroq(model=model_name, api_key=groq_api_key)
-        elif self.model_provider == "openai":
-            print("Loading LLM from OpenAI..............")
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            model_name = self.config["llm"]["openai"]["model_name"]
-            llm = ChatOpenAI(model_name="o4-mini", api_key=openai_api_key)
-        
-        return llm
+        """Construct a fresh provider client for the current request."""
+        try:
+            from langchain_groq import ChatGroq
+        except ImportError as exc:
+            raise RuntimeError(
+                "Groq integration is unavailable. Install the project requirements."
+            ) from exc
+
+        model_name = self.config["llm"]["groq"]["model_name"]
+        return ChatGroq(model=model_name, api_key=self._api_key)
+
+    def validate_api_key(self) -> None:
+        """Verify a supplied key by making a minimal authenticated model request."""
+        llm = self.load_llm()
+        llm.invoke("Reply with exactly: OK")

@@ -1,12 +1,47 @@
-# Python-generated files
+# Python
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.ipynb_checkpoints/
 
 # Virtual environments
-.venv
-env
+.venv/
+venv/
+env/
+
+# Secrets
 .env
+.env.*
+!.env.example
+
+# Logs and generated outputs
+*.log
+my_graph.png
+output/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Caches and editors
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local Python environments
+byok_env/
+byok_env311/
+
+
+# Local environment configuration
+.env.name

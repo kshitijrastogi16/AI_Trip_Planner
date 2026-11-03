@@ -1,95 +1,72 @@
+import os
 from typing import List
+
+from dotenv import load_dotenv
 from langchain.tools import tool
 
 from utils.place_info_search import GooglePlaceSearchTool, TavilyPlaceSearchTool
 
 
 class PlaceSearchTool:
-    def __init__(self, api_key: str = None):
-        import os
-        from dotenv import load_dotenv
+    """Place-search tools with optional backend-managed provider credentials.
+
+    Groq BYOK is independent from these search providers. If neither Google
+    Places nor Tavily is configured on the API service, the agent still starts
+    and these tools return a clear unavailable message when called.
+    """
+
+    def __init__(self, api_key: str | None = None):
         load_dotenv()
-        api_key = api_key or os.getenv("GPLACES_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "Missing GPLACES_API_KEY. Add it to your .env file."
-            )
-        self.google_places_search = GooglePlaceSearchTool(api_key)
+        google_key = api_key or os.getenv("GPLACES_API_KEY")
+        self.google_places_search = GooglePlaceSearchTool(google_key) if google_key else None
         self.tavily_search = TavilyPlaceSearchTool()
         self.place_search_tool_list = self._setup_tools()
 
-    def _setup_tools(self) -> List:
-        """Set up all place-search tools."""
+    def _search(self, google_method: str, tavily_method: str, location: str, label: str) -> str:
+        if not location:
+            return "Please provide a city or location."
 
+        if self.google_places_search is not None:
+            try:
+                result = getattr(self.google_places_search, google_method)(location)
+                if result:
+                    return f"{label} in {location} (Google Places): {result}"
+            except Exception:
+                # Fall through to Tavily without exposing provider errors or keys.
+                pass
+
+        try:
+            result = getattr(self.tavily_search, tavily_method)(location)
+            if result:
+                return f"{label} in {location} (web search): {result}"
+        except Exception:
+            pass
+
+        return (
+            f"Live {label.lower()} search is unavailable. Configure GPLACES_API_KEY "
+            "or TAVILY_API_KEY on the backend service."
+        )
+
+    def _setup_tools(self) -> List:
         @tool
         def search_attractions(location: str = None, city: str = None, place: str = None) -> str:
             """Search tourist attractions. Supply the destination using location, city, or place."""
-            place = location or city or place
-            if not place:
-                return "Please provide a city or location."
-            try:
-                result = self.google_places_search.google_search_attractions(place)
-                if result:
-                    return f"Following are the attractions of {place} as suggested by Google: {result}"
-            except Exception as e:
-                tavily_result = self.tavily_search.tavily_search_attractions(place)
-                return (
-                    f"Google could not find the details due to {e}. "
-                    f"Following are the attractions of {place}: {tavily_result}"
-                )
-            return f"No attractions found for {place}."
+            destination = location or city or place
+            return self._search("google_search_attractions", "tavily_search_attractions", destination, "Attractions")
 
         @tool
         def search_restaurants(location: str) -> str:
-            """Search for restaurants and eateries in a specified location. Provide the city or place as location."""
-            place = location
-            try:
-                result = self.google_places_search.google_search_restaurants(place)
-                if result:
-                    return f"Following are the restaurants of {place} as suggested by Google: {result}"
-            except Exception as e:
-                tavily_result = self.tavily_search.tavily_search_restaurants(place)
-                return (
-                    f"Google could not find the details due to {e}. "
-                    f"Following are the restaurants of {place}: {tavily_result}"
-                )
-            return f"No restaurants found for {place}."
+            """Search for restaurants and eateries in a specified location."""
+            return self._search("google_search_restaurants", "tavily_search_restaurants", location, "Restaurants")
 
         @tool
         def search_activities(location: str) -> str:
-            """Search for popular activities in a specified location. Provide the city or place as location."""
-            place = location
-            try:
-                result = self.google_places_search.google_search_activity(place)
-                if result:
-                    return f"Following are the activities in and around {place} as suggested by Google: {result}"
-            except Exception as e:
-                tavily_result = self.tavily_search.tavily_search_activity(place)
-                return (
-                    f"Google could not find the details due to {e}. "
-                    f"Following are the activities of {place}: {tavily_result}"
-                )
-            return f"No activities found for {place}."
+            """Search for popular activities in a specified location."""
+            return self._search("google_search_activity", "tavily_search_activity", location, "Activities")
 
         @tool
         def search_transportation(location: str) -> str:
-            """Search for available transportation options in a specified location. Provide the city or place as location."""
-            place = location
-            try:
-                result = self.google_places_search.google_search_transportation(place)
-                if result:
-                    return f"Following are the modes of transportation available in {place} as suggested by Google: {result}"
-            except Exception as e:
-                tavily_result = self.tavily_search.tavily_search_transportation(place)
-                return (
-                    f"Google could not find the details due to {e}. "
-                    f"Following are the modes of transportation available in {place}: {tavily_result}"
-                )
-            return f"No transportation information found for {place}."
+            """Search for transportation options in a specified location."""
+            return self._search("google_search_transportation", "tavily_search_transportation", location, "Transportation")
 
-        return [
-            search_attractions,
-            search_restaurants,
-            search_activities,
-            search_transportation,
-        ]
+        return [search_attractions, search_restaurants, search_activities, search_transportation]
